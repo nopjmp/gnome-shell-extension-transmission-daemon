@@ -770,8 +770,8 @@ const TransmissionTorrentSmall = new Lang.Class({
         this.infos = new St.Label({text: ''});
         this.box.add(this.infos);
 
-        this.addActor(name_label);
-        this.addActor(this.box, {span: -1, align: St.Align.END});
+        this.actor.add(name_label);
+        this.actor.add(this.box, {span: -1, align: St.Align.END});
 
         this.buildInfo();
     },
@@ -843,7 +843,7 @@ const TransmissionTorrent = new Lang.Class({
                                                  reactive: false});
         this._progress_bar.height = 10;
         this._progress_bar.connect('repaint', Lang.bind(this, this._draw));
-        this.addActor(this._progress_bar);
+        this.actor.add(this._progress_bar);
 
         this._error_info = new PopupMenu.PopupMenuItem(this._infos.error,
                                                        {reactive: false,
@@ -1107,8 +1107,8 @@ const TorrentName = new Lang.Class({
         let name_label = new St.Label({text: params.name});
         name_label.set_style('max-width: 350px');
 
-        this.addActor(name_label);
-        this.addActor(this.box, {span: -1, align: St.Align.END});
+        this.actor.add(name_label);
+        this.actor.add(this.box, {span: -1, align: St.Align.END});
 
         this.updateButtons();
     },
@@ -1186,7 +1186,7 @@ const TorrentsControls = new Lang.Class({
 
         this.vbox.add(this.ctrl_box, {expand: true, span: -1});
 
-        this.addActor(this.vbox, {expand: true, span: -1});
+        this.actor.add(this.vbox, {expand: true, span: -1});
     },
 
     setInfo: function(text) {
@@ -1379,43 +1379,72 @@ const ControlButton = new Lang.Class({
     }
 });
 
-const TorrentsFilters = new Lang.Class({
-    Name: 'TorrentsFilters',
+// This class changes the signal to 'clicked' to avoid closing the menu
+const PopupMenuItemNoClose = new Lang.Class({
+    Name: 'PopupMenuItemNoClose',
     Extends: PopupMenu.PopupBaseMenuItem,
 
+    _init: function (text, params) {
+        this.parent(params);
+
+        this.label = new St.Label({ text: text });
+        this.actor.add_child(this.label);
+        this.actor.label_actor = this.label
+    },
+    _onButtonReleaseEvent: function (actor, event) {
+        //this.activate(event);
+        this.emit('clicked', event);
+        return true;
+    }
+});
+
+const TorrentsFilters = new Lang.Class({
+    Name: 'TorrentsFilters',
+    Extends: PopupMenu.PopupSubMenuMenuItem,
+
     _init: function() {
-        this.parent({reactive: false, style_class: 'status-chooser'});
+        this.parent(_("Filter"));
 
-        this._combo = new PopupMenu.PopupComboBoxMenuItem(
-                                        {style_class: 'status-chooser-combo'});
-        let item;
-        item = new PopupMenu.PopupMenuItem(_("All"));
-        this._combo.addMenuItem(item, StatusFilter.ALL);
-        item = new PopupMenu.PopupMenuItem(_("Active"));
-        this._combo.addMenuItem(item, StatusFilter.ACTIVE);
-        item = new PopupMenu.PopupMenuItem(_("Downloading"));
-        this._combo.addMenuItem(item, StatusFilter.DOWNLOADING);
-        item = new PopupMenu.PopupMenuItem(_("Seeding"));
-        this._combo.addMenuItem(item, StatusFilter.SEEDING);
-        item = new PopupMenu.PopupMenuItem(_("Paused"));
-        this._combo.addMenuItem(item, StatusFilter.PAUSED);
-        item = new PopupMenu.PopupMenuItem(_("Finished"));
-        this._combo.addMenuItem(item, StatusFilter.FINISHED);
+        this.filter = gsettings.get_int(TDAEMON_LATEST_FILTER);
 
-        this._combo.setActiveItem(gsettings.get_int(TDAEMON_LATEST_FILTER));
-        this._combo.setSensitive(6);
+        this._addMenuItem("All", StatusFilter.ALL);
+        this._addMenuItem("Active", StatusFilter.ACTIVE);
+        this._addMenuItem("Downloading", StatusFilter.DOWNLOADING);
+        this._addMenuItem("Seeding", StatusFilter.SEEDING);       
+        this._addMenuItem("Paused", StatusFilter.PAUSED);
+        this._addMenuItem("Finished", StatusFilter.FINISHED);
 
-        this._combo.connect('active-item-changed',
-                            Lang.bind(this, this.filterByState));
+        this.setMenuOrnaments();
+    },
 
-        this.addActor(this._combo.actor);
+    _addMenuItem: function(labeltext, statusfilter) {
+        let item = new PopupMenuItemNoClose(_(labeltext));
+        item.connect('clicked', Lang.bind(this, function(self) {
+            this.filter = statusfilter;
+            gsettings.set_int(TDAEMON_LATEST_FILTER, this.filter);
+            this.filterByState();
+            this.setMenuOrnaments();
+        }));
+        item._filter = statusfilter;
+        this.menu.addMenuItem(item);
+    },
 
+    setMenuOrnaments: function() {
+        let children = this.menu._getMenuItems();
+        for (let i = children.length - 1; i >= 0; i--) {
+            if(children[i]._filter == this.filter) {
+                children[i].setOrnament(PopupMenu.Ornament.CHECK);
+            }
+            else {
+                children[i].setOrnament(PopupMenu.Ornament.NONE);
+            }
+        }
     },
 
     filterByState: function() {
         for (let id in transmissionDaemonIndicator._torrents) {
             let torrent = transmissionDaemonIndicator._torrents[id];
-            switch (this._combo._activeItemPos) {
+            switch (this.filter) {
                 case StatusFilter.ALL:
                     torrent.show();
                     break;
@@ -1456,7 +1485,6 @@ const TorrentsFilters = new Lang.Class({
                     break;
             }
         }
-        gsettings.set_int(TDAEMON_LATEST_FILTER, this._combo._activeItemPos);
     },
 
     hide: function() {
@@ -1476,7 +1504,7 @@ const TorrentsMenu = new Lang.Class({
         this.parent(sourceActor, 0.0, St.Side.TOP);
 
         // override base style
-        this._boxWrapper.set_style('min-width: 450px');
+        this.box.set_style('min-width: 450px');
 
         this.controls = new TorrentsTopControls();
         this.filters = new TorrentsFilters();
