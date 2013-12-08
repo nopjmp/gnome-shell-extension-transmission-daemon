@@ -518,7 +518,7 @@ const TransmissionDaemonIndicator = new Lang.Class({
                                   '/org/freedesktop/DBus');
         proxy.ListNamesRemote(Lang.bind(this, function(names) {
             this._server_type = "daemon";
-            for (n in names[0]) {
+            for (let n in names[0]) {
                 let name = names[0][n];
                 if (name.search('com.transmissionbt.transmission') > -1
                    && (this._host == "localhost" || this._host == "127.0.0.1")) {
@@ -1535,16 +1535,14 @@ const TorrentsMenu = new Lang.Class({
     addMenuItem: function(menuItem, position) {
         if (menuItem instanceof TransmissionTorrent || menuItem instanceof TransmissionTorrentSmall) {
             this._scrollBox.add(menuItem.actor);
-            this._connectSubMenuSignals(menuItem, menuItem);
-            menuItem._closingId = this.connect('open-state-changed',
+            this._connectItemSignals(menuItem);
+            let parentOpenStateChangedId = this.connect('open-state-changed',
                 function(self, open) {
                     if (!open)
                         menuItem.close(false);
                 });
             menuItem.connect('destroy', Lang.bind(this, function() {
-                menuItem.disconnect(menuItem._subMenuActivateId);
-                menuItem.disconnect(menuItem._subMenuActiveChangeId);
-
+                this.disconnect(parentOpenStateChangedId);
                 this.length--;
             }));
         }
